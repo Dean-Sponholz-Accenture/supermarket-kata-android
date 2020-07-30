@@ -6,26 +6,30 @@ class Teller(private val catalog: SupermarketCatalog) {
 
     private val specialOffers = HashMap<Product, SpecialOffer>()
 
-    fun putSpecialOffer(offerType: SpecialOfferType, product: Product, argument: Double) {
-        specialOffers[product] = SpecialOffer(offerType, product, argument)
+    fun putSpecialOffer(offerType: SpecialOfferType, product: Product) {
+        specialOffers[product] = SpecialOffer(offerType, product)
     }
 
     fun checkOut(cart: ShoppingCart): Receipt {
         val receipt = Receipt()
-        val productQuantities = cart.getItems()
-        productQuantities.forEach { pq ->
-            val product = pq.product
-            val quantity = pq.quantity
+        val productQuantities = cart.productQuantities()
+        productQuantities.forEach { productQuantity ->
+            val product = productQuantity.key
+            val quantity = productQuantity.value
             val unitPrice = catalog.getUnitPrice(product)
             val price = quantity * unitPrice
             receipt.addProduct(product, quantity, unitPrice, price)
         }
-        applyOffers(receipt, specialOffers, catalog)
+        val receiptWithSpecialDiscounts = applyOffers(receipt, specialOffers, catalog)
 
-        return receipt
+        return receiptWithSpecialDiscounts
     }
 
-    private fun applyOffers(receipt: Receipt, offers: Map<Product, SpecialOffer>, catalog: SupermarketCatalog) {
+    private fun applyOffers(
+        receipt: Receipt,
+        offers: Map<Product, SpecialOffer>,
+        catalog: SupermarketCatalog
+    ): Receipt {
         receipt.getItems().forEach { receiptItem ->
             val product = receiptItem.product
             val quantity = receiptItem.quantity
@@ -34,59 +38,29 @@ class Teller(private val catalog: SupermarketCatalog) {
                 val offer = offers[product]!!
                 val unitPrice = catalog.getUnitPrice(product)
                 val quantityAsInt = quantity.toInt()
-                var discount: Discount? = null
 
                 //item count
-                var requiredDiscountThreshold = when (offer.offerType) {
-                    SpecialOfferType.ThreeForTwo -> 3
-                    SpecialOfferType.TwoForAmount -> 2
-                    SpecialOfferType.FiveForAmount -> 5
-                    SpecialOfferType.TenPercentDiscount -> 1
-
-
-                }
+                val requiredDiscountThreshold = offer.offerType.requiredProductThreshold
                 val numberOfSpecialOffersApplied = quantityAsInt / requiredDiscountThreshold
 
                 //discount amount
-                discount = when (offer.offerType) {
-                    SpecialOfferType.ThreeForTwo -> {
-                        if (quantityAsInt >= 3){
-                            val discountAmount =
-                                quantity * unitPrice - (numberOfSpecialOffersApplied.toDouble() * 2.0 * unitPrice + quantityAsInt % 3 * unitPrice)
-                          Discount(product, "3 for 2", discountAmount)
-                        }
-                        else{
-                            null
-                        }
+                val discount = when (val offerType = offer.offerType) {
+                    is SpecialOfferType.XForYDeal -> {
+                        getDiscountAmount(
+                            quantity,
+                            requiredDiscountThreshold,
+                            unitPrice,
+                            offerType.atPriceOfNumberOfProducts,
+                            numberOfSpecialOffersApplied,
+                            product
+                        )
                     }
-                    SpecialOfferType.TenPercentDiscount -> {
-                            Discount(
-                                product,
-                                offer.argument.toString() + "% off",
-                                quantity * unitPrice * offer.argument / 100.0
-                            )
-                    }
-                    SpecialOfferType.FiveForAmount -> {
-                        if (quantityAsInt >= 5){
-                            val nonDiscountedPrice = unitPrice * quantity
-                            val remainingUnitsAfterDiscount = (quantityAsInt % 5)
-                            val discountedPrice = (offer.argument * numberOfSpecialOffersApplied + remainingUnitsAfterDiscount * unitPrice)
-                            val discountTotal = nonDiscountedPrice - discountedPrice
-                            Discount(product, requiredDiscountThreshold.toString() + " for " + offer.argument, discountTotal)
-                        }
-                        else{
-                            null
-                        }
-                    }
-                    SpecialOfferType.TwoForAmount -> {
-                        if (quantityAsInt >= 2){
-                            val total = offer.argument * (quantityAsInt / requiredDiscountThreshold) + quantityAsInt % 2 * unitPrice
-                            val discountN = unitPrice * quantity - total
-                            Discount(product, "2 for " + offer.argument, discountN)
-                        }
-                        else{
-                            null
-                        }
+                    is SpecialOfferType.PercentOffDeal -> {
+                        Discount(
+                            product,
+                            offerType.percentageOff.toString() + "% off",
+                            quantity * unitPrice * offerType.percentageOff / 100.0
+                        )
                     }
                 }
 
@@ -95,5 +69,36 @@ class Teller(private val catalog: SupermarketCatalog) {
                 }
             }
         }
+        return receipt
+    }
+
+    private fun getDiscountAmount(
+        quantity: Double,
+        requiredDiscountThreshold: Int,
+        unitPrice: Double,
+        atPriceOfNumberOfProducts: Double,
+        numberOfSpecialOffersApplied: Int,
+        product: Product
+    ): Discount? {
+        val quantityAsInt = quantity.toInt()
+        val discount = if (quantityAsInt >= requiredDiscountThreshold) {
+            val nonDiscountedPrice = unitPrice * quantity
+            val remainingUnitsAfterDiscount = (quantityAsInt % requiredDiscountThreshold)
+            val discountedPrice =
+                (atPriceOfNumberOfProducts * numberOfSpecialOffersApplied + remainingUnitsAfterDiscount * unitPrice)
+            val discountTotal = nonDiscountedPrice - discountedPrice
+            Discount(
+                product,
+                requiredDiscountThreshold.toString() + " for " + atPriceOfNumberOfProducts.toString(),
+                discountTotal
+            )
+        } else {
+            null
+        }
+        return discount
     }
 }
+
+//val offer = offers[product]!!
+//val unitPrice = catalog.getUnitPrice(product)
+//val quantityAsInt = quantity.toInt()

@@ -1,20 +1,13 @@
 package supermarket.model
 
-import java.util.ArrayList
 import java.util.HashMap
 
 class ShoppingCart {
 
-    private val items = ArrayList<ProductQuantity>()
-    internal var productQuantities: MutableMap<Product, Double> = HashMap()
-
-
-    internal fun getItems(): List<ProductQuantity> {
-        return ArrayList(items)
-    }
+    private var productQuantities: MutableMap<Product, Double> = HashMap()
 
     internal fun addItem(product: Product) {
-        this.addItemQuantity(product, 1.0)
+        addItemQuantity(product, 1.0)
     }
 
     internal fun productQuantities(): Map<Product, Double> {
@@ -22,7 +15,6 @@ class ShoppingCart {
     }
 
     fun addItemQuantity(product: Product, quantity: Double) {
-        items.add(ProductQuantity(product, quantity))
         if (productQuantities.containsKey(product)) {
             productQuantities[product] = productQuantities[product]!! + quantity
         } else {
